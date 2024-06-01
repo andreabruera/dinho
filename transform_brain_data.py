@@ -1,12 +1,12 @@
 import numpy
 import os
+import pickle
 import re
 
 from tqdm import tqdm
 
 words = {1 : list(), 2 : list()}
 full_subjects_data = {1 : dict(), 2 : dict()}
-
 
 for d in words.keys():
     ### words
@@ -38,11 +38,13 @@ for d in words.keys():
             checker.append(brain_area)
         else:
             raise RuntimeError('There was an issue with area naming!')
+        subs = set()
         for f in os.listdir(os.path.join(folder, brain_area_folder,)):
             if 'txt' not in f:
                 continue
             mtrx = list()
             sub = f.split('_')[-1].replace('.txt', '')
+            subs.add(sub)
             with open(os.path.join(folder, brain_area_folder, f)) as i:
                 for l_i, l in enumerate(i):
                     line = [sim for sim_i, sim in enumerate(l.strip().split('\t'))]
@@ -60,5 +62,33 @@ for d in words.keys():
                     if w_two_i > w_one_i:
                         ### sims
                         key = tuple(sorted([w_one, w_two]))
-                        full_subjects_data[d][brain_area][key] = dict()
-                        full_subjects_data[d][brain_area][key][sub] = float(mtrx[w_one_i][w_two_i])
+                        if key not in full_subjects_data[d][brain_area].keys():
+                            full_subjects_data[d][brain_area][key] = list()
+                        full_subjects_data[d][brain_area][key].append(float(mtrx[w_one_i][w_two_i]))
+        ### checking that vector size is fine
+        for key, v in full_subjects_data[d][brain_area].items():
+            #print(len(v))
+            assert len(v) == len(subs)
+
+print('now writing to file...')
+for dataset, dataset_data in tqdm(full_subjects_data.items()):
+    d_marker = 'fernandino{}'.format(dataset)
+    ### tsvs
+    base_folder = os.path.join('reorganized_dataset', 'tsv', d_marker)
+    os.makedirs(base_folder, exist_ok=True)
+    for brain_area, area_data in dataset_data.items():
+        with open(os.path.join(base_folder,
+                               '{}_similarities.tsv'.format(brain_area)), 'w') as o:
+            o.write('word_one\tword_two\tspearman_correlations\n')
+            for k, v in area_data.items():
+                o.write('{}\t{}\t'.format(k[0], k[1]))
+                for val in v:
+                    o.write('{}\t'.format(val))
+                o.write('\n')
+    ### pickles
+    base_folder = os.path.join('reorganized_dataset', 'pkls', d_marker)
+    os.makedirs(base_folder, exist_ok=True)
+    for brain_area, area_data in dataset_data.items():
+        with open(os.path.join(base_folder,
+                               '{}_similarities.pkl'.format(brain_area)), 'wb') as o:
+            pickle.dump(area_data, o)
